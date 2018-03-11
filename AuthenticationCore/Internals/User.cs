@@ -10,9 +10,10 @@ namespace AuthenticationCore.Internals
         public string Name => name;
         public ClaimsPrincipal Claims => claims;
 
-        internal User(string name)
+        internal User(string name, ClaimsPrincipal claims)
         {
             this.name = name;
+            this.claims = claims;
         }
     }
 }
