@@ -1,0 +1,10 @@
+.vs
+
+*\bin
+*\obj
+
+*\appsettings*.json
+*\ticket.txt
+*/CASOption.json
+
+*/*/PublishProfiles
