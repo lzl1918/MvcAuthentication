@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Http;
+using System;
 using System.Security.Claims;
 
 namespace AuthenticationCore
@@ -8,5 +9,6 @@ namespace AuthenticationCore
         string RedirectUrl { get; }
         string ValidateUrl { get; }
         string SessionName { get; }
+        Type CASResponseHandler { get; }
     }
 }

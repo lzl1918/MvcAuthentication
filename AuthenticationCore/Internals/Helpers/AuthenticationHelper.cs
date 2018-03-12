@@ -177,7 +177,7 @@ namespace AuthenticationCore.Internals.Helpers
             authAttribute = null;
             return AuthenticationDeclaration.No;
         }
-        private static void CheckRequestUrl(HttpContext httpContext, out string redirecct_url)
+        private static void CheckRequestUrl(HttpContext httpContext, out string redirect_url)
         {
             HttpRequest request = httpContext.Request;
             ICASOption option = (ICASOption)httpContext.RequestServices.GetService(typeof(ICASOption));
@@ -209,17 +209,12 @@ namespace AuthenticationCore.Internals.Helpers
                     {
                         if (response.StatusCode == System.Net.HttpStatusCode.OK)
                         {
-                            string[] res = response.Content.ReadAsStringAsync().GetAwaiter().GetResult().Split('\n');
-                            if (res[0] == "yes")
-                            {
-                                httpContext.Session.SetString(option.SessionName, res[1]);
-                                redirecct_url = url_not_escaped;
+                            string message = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                            Type handlerType = option.CASResponseHandler;
+                            ICASResponseHandler handler = (ICASResponseHandler)ActivatorUtilities.CreateInstance(httpContext.RequestServices, handlerType);
+                            handler.Invoke(httpContext, message, url_not_escaped, out redirect_url);
+                            if (redirect_url != null)
                                 return;
-                            }
-                            else
-                            {
-                                httpContext.Session.Remove(option.SessionName);
-                            }
                         }
                     }
                 }
@@ -228,7 +223,7 @@ namespace AuthenticationCore.Internals.Helpers
 
                 }
             }
-            redirecct_url = null;
+            redirect_url = null;
         }
         private static CustomAuthenticatorsAttribute[] GetCustomAuthenticators(TypeInfo type)
         {
