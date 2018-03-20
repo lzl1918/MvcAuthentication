@@ -36,4 +36,28 @@ namespace AuthenticationCore.Internals
             return new AuthenticationResult(true, false, authenticator, user);
         }
     }
+
+    internal sealed class LateBoundAuthenticationResult : IAuthenticationResult
+    {
+        private readonly IAuthenticationResultAccessor accessor;
+        private IAuthenticationResult actualResult;
+        public bool IsAuthenticated => actualResult == null ? (actualResult = accessor.Result).IsAuthenticated : actualResult.IsAuthenticated;
+        public bool IsCAS => actualResult == null ? (actualResult = accessor.Result).IsCAS : actualResult.IsCAS;
+        public Type Authenticator => actualResult == null ? (actualResult = accessor.Result).Authenticator : actualResult.Authenticator;
+        public IUser User => actualResult == null ? (actualResult = accessor.Result).User : actualResult.User;
+
+        public LateBoundAuthenticationResult(IAuthenticationResultAccessor accessor)
+        {
+            this.accessor = accessor;
+            accessor.ResultUpdated += OnResultUpdated;
+        }
+        ~LateBoundAuthenticationResult()
+        {
+            accessor.ResultUpdated -= OnResultUpdated;
+        }
+        private void OnResultUpdated(object sender, EventArgs e)
+        {
+            actualResult = accessor.Result;
+        }
+    }
 }

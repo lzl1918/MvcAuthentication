@@ -15,7 +15,7 @@ namespace AuthenticationCore
                 throw new InvalidOperationException($"type {casResponseHandler.Name} does not implement interface {typeof(ICASResponseHandler).Name}");
 
             services.AddScoped<IAuthenticationResultAccessor, AuthenticationResultAccessor>();
-            services.AddScoped<IAuthenticationResult>(s => s.GetService<IAuthenticationResultAccessor>().Result);
+            services.AddScoped<IAuthenticationResult, LateBoundAuthenticationResult>();
             services.AddScoped<IAuthenticationService, AuthenticationService>();
             services.AddSingleton<ICASOption>(new CASOption(redirectUrl, validateUrl, sessionName, casResponseHandler));
             return services;

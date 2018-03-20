@@ -1,5 +1,6 @@
 ﻿using AuthenticationCore.Internals.Helpers;
 using Microsoft.AspNetCore.Http;
+using System;
 using System.Security.Claims;
 
 namespace AuthenticationCore.Internals
@@ -7,8 +8,17 @@ namespace AuthenticationCore.Internals
     internal sealed class AuthenticationResultAccessor : IAuthenticationResultAccessor
     {
         private readonly IHttpContextAccessor httpContextAccessor;
-        private IAuthenticationResult result;
-        public IAuthenticationResult Result => result ?? (result = AuthenticationHelper.ReadAuthenticationResult(httpContextAccessor.HttpContext));
+        public event EventHandler ResultUpdated;
+
+        public IAuthenticationResult Result
+        {
+            get => AuthenticationHelper.ReadAuthenticationResult(httpContextAccessor.HttpContext);
+            set
+            {
+                AuthenticationHelper.SaveAuthenticationResult(httpContextAccessor.HttpContext, value);
+                ResultUpdated?.Invoke(this, new EventArgs());
+            }
+        }
 
         public AuthenticationResultAccessor(IHttpContextAccessor httpContextAccessor)
         {

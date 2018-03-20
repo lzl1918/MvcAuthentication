@@ -14,11 +14,13 @@ namespace AuthenticationCore.Internals
     {
         private readonly IHttpContextAccessor httpContextAccessor;
         private readonly ICASOption option;
+        private readonly IAuthenticationResultAccessor accessor;
 
-        public AuthenticationService(IHttpContextAccessor httpContextAccessor, ICASOption option)
+        public AuthenticationService(IHttpContextAccessor httpContextAccessor, ICASOption option, IAuthenticationResultAccessor accessor)
         {
             this.httpContextAccessor = httpContextAccessor;
             this.option = option;
+            this.accessor = accessor;
         }
 
         public Task<IAuthenticationResult> AuthenticateAsync(IEnumerable<Type> authenticators, bool saveResult)
@@ -37,7 +39,7 @@ namespace AuthenticationCore.Internals
                             IAuthenticationResult authentication = AuthenticationResult.CAS(result.User);
                             if (saveResult)
                             {
-                                AuthenticationHelper.SaveAuthenticationResult(httpContext, authentication);
+                                accessor.Result = authentication;
                             }
                             return authentication;
                         }
@@ -59,7 +61,7 @@ namespace AuthenticationCore.Internals
                     IAuthenticationResult authentication = AuthenticationResult.CAS(result.User);
                     if (saveResult)
                     {
-                        AuthenticationHelper.SaveAuthenticationResult(httpContext, authentication);
+                        accessor.Result = authentication;
                     }
                     return authentication;
                 }
