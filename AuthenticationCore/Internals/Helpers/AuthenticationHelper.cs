@@ -2,8 +2,11 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Mvc.RazorPages.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Primitives;
 using System;
@@ -22,7 +25,9 @@ namespace AuthenticationCore.Internals.Helpers
     {
         private static Type IUSER_TYPE { get; } = typeof(IUser);
         private static Type TASK_TYPE { get; } = typeof(Task<int>).GetGenericTypeDefinition();
+        private static Type BASE_TASK_TYPE { get; } = typeof(Task);
         private static Type IACTIONRESULT_TYPE { get; } = typeof(IActionResult);
+        private static Type VOID_TYPE { get; } = typeof(void);
 
         internal static AuthenticatorMetadata CAS_AUTHENTICATOR { get; } = new AuthenticatorMetadata(typeof(CASAuthenticator), typeof(CASAuthenticator).GetMethod("Authenticate"));
 
@@ -156,7 +161,7 @@ namespace AuthenticationCore.Internals.Helpers
         }
         private static AuthenticationDeclaration IsAuthenticationRequired(ControllerActionDescriptor actionDescriptor, out AuthenticationRequiredAttribute authAttribute)
         {
-            AuthenticationRequiredAttribute[] authRequired = actionDescriptor.MethodInfo.GetCustomAttributes(typeof(AuthenticationRequiredAttribute), false).Cast<AuthenticationRequiredAttribute>().ToArray();
+            AuthenticationRequiredAttribute[] authRequired = actionDescriptor.MethodInfo.GetAttributes<AuthenticationRequiredAttribute>(false);
             if (authRequired.Length > 0)
             {
                 authAttribute = authRequired[0];
@@ -165,7 +170,7 @@ namespace AuthenticationCore.Internals.Helpers
                 return AuthenticationDeclaration.Action;
             }
 
-            authRequired = actionDescriptor.ControllerTypeInfo.GetCustomAttributes(typeof(AuthenticationRequiredAttribute), true).Cast<AuthenticationRequiredAttribute>().ToArray();
+            authRequired = actionDescriptor.ControllerTypeInfo.GetAttributes<AuthenticationRequiredAttribute>(true);
             if (authRequired.Length > 0)
             {
                 authAttribute = authRequired[0];
@@ -177,6 +182,33 @@ namespace AuthenticationCore.Internals.Helpers
             authAttribute = null;
             return AuthenticationDeclaration.No;
         }
+        private static AuthenticationDeclaration IsAuthenticationRequired(CompiledPageActionDescriptor actionDescriptor, out AuthenticationRequiredAttribute authAttribute)
+        {
+            HandlerMethodDescriptor handler = actionDescriptor.HandlerMethods.FirstOrDefault();
+            AuthenticationRequiredAttribute[] authRequired;
+            if (handler != null)
+            {
+                authRequired = handler.MethodInfo.GetAttributes<AuthenticationRequiredAttribute>(false);
+                if (authRequired.Length > 0)
+                {
+                    authAttribute = authRequired[0];
+                    if (authAttribute.Policy == AuthenticationPolicy.NoAuthentication)
+                        return AuthenticationDeclaration.No;
+                    return AuthenticationDeclaration.Action;
+                }
+            }
+            authRequired = actionDescriptor.ModelTypeInfo.GetAttributes<AuthenticationRequiredAttribute>(true);
+            if (authRequired.Length > 0)
+            {
+                authAttribute = authRequired[0];
+                if (authAttribute.Policy == AuthenticationPolicy.NoAuthentication)
+                    return AuthenticationDeclaration.No;
+                return AuthenticationDeclaration.Controller;
+            }
+            authAttribute = null;
+            return AuthenticationDeclaration.No;
+        }
+
         private static void CheckRequestUrl(HttpContext httpContext, out string redirect_url)
         {
             HttpRequest request = httpContext.Request;
@@ -323,11 +355,8 @@ namespace AuthenticationCore.Internals.Helpers
                     return null;
             }
         }
-        internal static AuthenticationInternalResult Authenticate(AuthorizationFilterContext context)
+        private static AuthenticationInternalResult AuthenticateMvc(ControllerActionDescriptor actionDescriptor, HttpContext httpContext)
         {
-            HttpContext httpContext = context.HttpContext;
-            ControllerActionDescriptor actionDescriptor = (ControllerActionDescriptor)context.ActionDescriptor;
-
             // first, check if the url contains ticket
             CheckRequestUrl(httpContext, out string redirect_url);
 
@@ -351,6 +380,47 @@ namespace AuthenticationCore.Internals.Helpers
             ISession session = httpContext.Session;
             return Authenticate(httpContext, authAttribute, attributeProvider);
         }
+        internal static AuthenticationInternalResult AuthenticateRazorPage(CompiledPageActionDescriptor actionDescriptor, HttpContext httpContext)
+        {
+            // first, check if the url contains ticket
+            CheckRequestUrl(httpContext, out string redirect_url);
+
+            if (redirect_url != null)
+            {
+                return new AuthenticationInternalResult(false, redirect_url, null, null);
+            }
+
+            // then, check if the action needs authorization
+            AuthenticationDeclaration declaration = IsAuthenticationRequired(actionDescriptor, out AuthenticationRequiredAttribute authAttribute);
+
+            if (declaration == AuthenticationDeclaration.No)
+            {
+                return new AuthenticationInternalResult(true, null, null, null);
+            }
+
+            ICustomAttributeProvider attributeProvider = null;
+            if (declaration == AuthenticationDeclaration.Action)
+                attributeProvider = actionDescriptor.HandlerMethods.First().MethodInfo;
+            else
+                attributeProvider = actionDescriptor.ModelTypeInfo;
+
+            ISession session = httpContext.Session;
+            return Authenticate(httpContext, authAttribute, attributeProvider);
+        }
+
+        internal static AuthenticationInternalResult Authenticate(AuthorizationFilterContext context)
+        {
+            HttpContext httpContext = context.HttpContext;
+            switch (context.ActionDescriptor)
+            {
+                case ControllerActionDescriptor controllerActionDescriptor:
+                    return AuthenticateMvc(controllerActionDescriptor, httpContext);
+                case CompiledPageActionDescriptor compiledPageActionDescriptor:
+                    return AuthenticateRazorPage(compiledPageActionDescriptor, httpContext);
+            }
+            return new AuthenticationInternalResult(true, null, null, null);
+        }
+
         #endregion AUTHENTICATION_EXECUTE
 
         #region CUSTOM_HANDLER_EXECUTE
@@ -419,6 +489,14 @@ namespace AuthenticationCore.Internals.Helpers
                         return true;
                     }
                 }
+                else if (BASE_TASK_TYPE.IsAssignableFrom(returnType))
+                {
+                    return true;
+                }
+                else if (returnType.Equals(VOID_TYPE))
+                {
+                    return true;
+                }
                 else if (IACTIONRESULT_TYPE.IsAssignableFrom(returnType))
                 {
                     return true;
@@ -442,6 +520,20 @@ namespace AuthenticationCore.Internals.Helpers
                         if (result == null)
                             return null;
                         return result;
+                    }
+                    else if (BASE_TASK_TYPE.IsAssignableFrom(returnType))
+                    {
+                        Task result = (Task)invoke_result;
+                        if (result == null)
+                            return null;
+                        if (result.Status == TaskStatus.WaitingToRun || result.Status == TaskStatus.Created)
+                            result.Start();
+                        result.Wait();
+                        return null;
+                    }
+                    else if (returnType.Equals(VOID_TYPE))
+                    {
+                        return null;
                     }
                     else
                     {

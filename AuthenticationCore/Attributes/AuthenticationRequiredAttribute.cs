@@ -16,7 +16,7 @@ namespace AuthenticationCore
 {
 
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
-    public class AuthenticationRequiredAttribute : Attribute, IAuthorizationFilter
+    public class AuthenticationRequiredAttribute : Attribute, IAuthorizationFilter, IPageFilter
     {
         public AuthenticationRequiredAttribute(AuthenticationPolicy policy = AuthenticationPolicy.All, AuthenticationFailedAction failedAction = AuthenticationFailedAction.KeepUnauthenticated)
         {
@@ -122,6 +122,19 @@ namespace AuthenticationCore
                     }
                     return;
             }
+        }
+
+        public void OnPageHandlerExecuted(PageHandlerExecutedContext context)
+        {
+            
+        }
+
+        public void OnPageHandlerExecuting(PageHandlerExecutingContext context)
+        {
+        }
+
+        public void OnPageHandlerSelected(PageHandlerSelectedContext context)
+        {
         }
     }
 }

@@ -2,6 +2,7 @@
 using System;
 using System.Security.Claims;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Mvc.RazorPages.Internal;
 
 namespace AuthenticationCore
 {
