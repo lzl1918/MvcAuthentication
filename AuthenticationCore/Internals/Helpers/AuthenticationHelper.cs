@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -209,7 +210,8 @@ namespace AuthenticationCore.Internals.Helpers
             return AuthenticationDeclaration.No;
         }
 
-        private static void CheckRequestUrl(HttpContext httpContext, out string redirect_url)
+        // if casResult == null, the url does not contain ticket
+        private static void CheckRequestUrl(HttpContext httpContext, out AuthenticationInternalResult casResult)
         {
             HttpRequest request = httpContext.Request;
             ICASOption option = (ICASOption)httpContext.RequestServices.GetService(typeof(ICASOption));
@@ -237,25 +239,40 @@ namespace AuthenticationCore.Internals.Helpers
                 try
                 {
                     HttpClient client = new HttpClient();
+                    client.DefaultRequestHeaders.Accept.Clear();
+                    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(option.ResponseAccept));
                     using (HttpResponseMessage response = client.GetAsync(target).GetAwaiter().GetResult())
                     {
                         if (response.StatusCode == System.Net.HttpStatusCode.OK)
                         {
                             string message = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                            Type handlerType = option.CASResponseHandler;
+                            Type handlerType = option.ResponseHandler;
                             ICASResponseHandler handler = (ICASResponseHandler)ActivatorUtilities.CreateInstance(httpContext.RequestServices, handlerType);
-                            handler.Invoke(httpContext, message, url_not_escaped, out redirect_url);
+                            IUser user = handler.Invoke(httpContext, message, url_not_escaped, out string redirect_url);
                             if (redirect_url != null)
+                            {
+                                casResult = new AuthenticationInternalResult(false, redirect_url, null, null);
                                 return;
+                            }
+                            if (user == null)
+                            {
+                                casResult = new AuthenticationInternalResult(true, null, null, null);
+                                return;
+                            }
+                            else
+                            {
+                                casResult = new AuthenticationInternalResult(false, null, user, CAS_AUTHENTICATOR);
+                                return;
+                            }
                         }
                     }
                 }
                 catch
                 {
-
+                    casResult = null;
                 }
             }
-            redirect_url = null;
+            casResult = null;
         }
         private static CustomAuthenticatorsAttribute[] GetCustomAuthenticators(TypeInfo type)
         {
@@ -358,10 +375,9 @@ namespace AuthenticationCore.Internals.Helpers
         private static AuthenticationInternalResult AuthenticateMvc(ControllerActionDescriptor actionDescriptor, HttpContext httpContext)
         {
             // first, check if the url contains ticket
-            CheckRequestUrl(httpContext, out string redirect_url);
-
-            if (redirect_url != null)
-                return new AuthenticationInternalResult(false, redirect_url, null, null);
+            CheckRequestUrl(httpContext, out AuthenticationInternalResult result);
+            if (result != null)
+                return result;
 
             // then, check if the action needs authorization
             AuthenticationDeclaration declaration = IsAuthenticationRequired(actionDescriptor, out AuthenticationRequiredAttribute authAttribute);
@@ -383,12 +399,9 @@ namespace AuthenticationCore.Internals.Helpers
         internal static AuthenticationInternalResult AuthenticateRazorPage(CompiledPageActionDescriptor actionDescriptor, HttpContext httpContext)
         {
             // first, check if the url contains ticket
-            CheckRequestUrl(httpContext, out string redirect_url);
-
-            if (redirect_url != null)
-            {
-                return new AuthenticationInternalResult(false, redirect_url, null, null);
-            }
+            CheckRequestUrl(httpContext, out AuthenticationInternalResult result);
+            if (result != null)
+                return result;
 
             // then, check if the action needs authorization
             AuthenticationDeclaration declaration = IsAuthenticationRequired(actionDescriptor, out AuthenticationRequiredAttribute authAttribute);

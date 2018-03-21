@@ -8,6 +8,6 @@ namespace AuthenticationCore
 
     public interface ICASResponseHandler
     {
-        void Invoke(HttpContext httpContext, string message, string actionUrl, out string redirectUrl);
+        IUser Invoke(HttpContext httpContext, string message, string actionUrl, out string redirectUrl);
     }
 }

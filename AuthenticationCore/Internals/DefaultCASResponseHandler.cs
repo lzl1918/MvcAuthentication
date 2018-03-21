@@ -9,7 +9,7 @@ namespace AuthenticationCore
 
     internal sealed class DefaultCASResponseHandler : ICASResponseHandler
     {
-        public void Invoke(HttpContext httpContext, string message, string actionUrl, out string redirectUrl)
+        public IUser Invoke(HttpContext httpContext, string message, string actionUrl, out string redirectUrl)
         {
             ICASOption option = httpContext.RequestServices.GetService<ICASOption>();
             string[] res = message.Split('\n');
@@ -17,11 +17,13 @@ namespace AuthenticationCore
             {
                 httpContext.Session.SetString(option.SessionName, res[1]);
                 redirectUrl = actionUrl;
+                return null;
             }
             else
             {
                 httpContext.Session.Remove(option.SessionName);
                 redirectUrl = null;
+                return null;
             }
         }
     }

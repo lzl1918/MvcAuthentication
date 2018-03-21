@@ -9,6 +9,8 @@ namespace AuthenticationCore
         string RedirectUrl { get; }
         string ValidateUrl { get; }
         string SessionName { get; }
-        Type CASResponseHandler { get; }
+
+        string ResponseAccept { get; }
+        Type ResponseHandler { get; }
     }
 }
