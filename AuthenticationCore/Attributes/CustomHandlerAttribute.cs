@@ -15,15 +15,18 @@ namespace AuthenticationCore
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
     public class CustomHandlerAttribute : Attribute
     {
+        internal object[] ConstructParameters { get; }
         internal Type Handler { get; }
-        public CustomHandlerAttribute(Type handler)
+
+        public CustomHandlerAttribute(Type handler, params object[] constructParameters)
         {
             Handler = handler;
+            ConstructParameters = constructParameters;
         }
 
         internal IActionResult Execute(HttpContext httpContext, AuthenticationPolicy policy, Type[] customAuthenticators)
         {
-            return AuthenticationHelper.ExecuteHandler(Handler, httpContext, policy, customAuthenticators);
+            return AuthenticationHelper.ExecuteHandler(Handler, ConstructParameters, httpContext, policy, customAuthenticators);
         }
     }
 }

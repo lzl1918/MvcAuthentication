@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Mvc.RazorPages.Infrastructure;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -73,42 +75,25 @@ namespace AuthenticationCore
 
                 case AuthenticationFailedAction.CustomHandler:
                     {
-                        ControllerActionDescriptor actionDescriptor = (ControllerActionDescriptor)context.ActionDescriptor;
-                        List<Type> customAuthenticators = new List<Type>();
-                        if (actionDescriptor.MethodInfo.HasAttribute<AuthenticationRequiredAttribute>(false))
+                        List<Type> customAuthenticators = null;
+                        CustomHandlerAttribute[] handlers = null;
+                        switch (context.ActionDescriptor)
                         {
-                            foreach (CustomAuthenticatorsAttribute authenticators in actionDescriptor.MethodInfo.GetAttributes<CustomAuthenticatorsAttribute>(false))
-                            {
-                                customAuthenticators.AddRange(authenticators.Authenticators.Select(x => x.Type));
-                            }
-                        }
-                        else
-                        {
-                            Type baseType;
-                            TypeInfo controllerType;
-                            while (true)
-                            {
-                                controllerType = actionDescriptor.ControllerTypeInfo;
-                                if (actionDescriptor.MethodInfo.HasAttribute<AuthenticationRequiredAttribute>(false))
-                                {
-                                    foreach (CustomAuthenticatorsAttribute authenticators in actionDescriptor.MethodInfo.GetAttributes<CustomAuthenticatorsAttribute>(false))
-                                    {
-                                        customAuthenticators.AddRange(authenticators.Authenticators.Select(x => x.Type));
-                                    }
-                                    break;
-                                }
-                                baseType = controllerType.BaseType;
-                                if (baseType == null)
-                                    break;
-
-                                controllerType = baseType.GetTypeInfo();
-                            }
+                            case ControllerActionDescriptor controllerActionDescriptor:
+                                customAuthenticators = GetCustomAuthenticators(controllerActionDescriptor);
+                                handlers = GetCustomHandlers(controllerActionDescriptor);
+                                break;
+                            case CompiledPageActionDescriptor compiledPageActionDescriptor:
+                                customAuthenticators = GetCustomAuthenticators(compiledPageActionDescriptor);
+                                handlers = GetCustomHandlers(compiledPageActionDescriptor);
+                                break;
+                            default:
+                                throw new Exception($"not handled with action descriptor of type {context.ActionDescriptor.GetType().Name}");
                         }
 
-                        CustomHandlerAttribute[] handlers = actionDescriptor.MethodInfo.GetCustomAttributes(typeof(CustomHandlerAttribute), false).Cast<CustomHandlerAttribute>().ToArray();
-                        if (handlers.Length > 0)
+                        if (handlers != null && handlers.Length > 0)
                         {
-                            IActionResult actionResult = AuthenticationHelper.ExecuteHandler(handlers[0].Handler, httpContext, Policy, customAuthenticators.ToArray());
+                            IActionResult actionResult = AuthenticationHelper.ExecuteHandler(handlers[0].Handler, handlers[0].ConstructParameters, httpContext, Policy, customAuthenticators.ToArray());
                             if (actionResult != null)
                             {
                                 context.Result = actionResult;
@@ -117,11 +102,154 @@ namespace AuthenticationCore
                             else
                             {
                                 // not handled
+                                throw new Exception($"not handled");
                             }
                         }
                     }
                     return;
             }
+        }
+        private List<Type> GetCustomAuthenticators(ControllerActionDescriptor controllerActionDescriptor)
+        {
+            List<Type> result = new List<Type>();
+            MethodInfo method = controllerActionDescriptor.MethodInfo;
+            if (method.HasAttribute<AuthenticationRequiredAttribute>(false))
+            {
+                foreach (CustomAuthenticatorsAttribute authenticators in method.GetAttributes<CustomAuthenticatorsAttribute>(false))
+                {
+                    result.AddRange(authenticators.Authenticators.Select(x => x.Type));
+                }
+            }
+            else
+            {
+                Type baseType;
+                TypeInfo controllerType;
+                while (true)
+                {
+                    controllerType = controllerActionDescriptor.ControllerTypeInfo;
+                    if (controllerType.HasAttribute<AuthenticationRequiredAttribute>(false))
+                    {
+                        foreach (CustomAuthenticatorsAttribute authenticators in controllerType.GetAttributes<CustomAuthenticatorsAttribute>(false))
+                        {
+                            result.AddRange(authenticators.Authenticators.Select(x => x.Type));
+                        }
+                        break;
+                    }
+                    baseType = controllerType.BaseType;
+                    if (baseType == null)
+                        break;
+
+                    controllerType = baseType.GetTypeInfo();
+                }
+            }
+            return result;
+        }
+        private List<Type> GetCustomAuthenticators(CompiledPageActionDescriptor compiledPageActionDescriptor)
+        {
+            List<Type> result = new List<Type>();
+            HandlerMethodDescriptor methodDescriptor = compiledPageActionDescriptor.HandlerMethods.FirstOrDefault();
+            bool checkPageModel = true;
+            if (methodDescriptor != null)
+            {
+                MethodInfo method = methodDescriptor.MethodInfo;
+                if (method.HasAttribute<AuthenticationRequiredAttribute>(false))
+                {
+                    foreach (CustomAuthenticatorsAttribute authenticators in method.GetAttributes<CustomAuthenticatorsAttribute>(false))
+                    {
+                        result.AddRange(authenticators.Authenticators.Select(x => x.Type));
+                    }
+                    checkPageModel = false;
+                }
+            }
+
+            if (checkPageModel)
+            {
+                Type baseType;
+                TypeInfo controllerType;
+                while (true)
+                {
+                    controllerType = compiledPageActionDescriptor.ModelTypeInfo;
+                    if (controllerType.HasAttribute<AuthenticationRequiredAttribute>(false))
+                    {
+                        foreach (CustomAuthenticatorsAttribute authenticators in controllerType.GetAttributes<CustomAuthenticatorsAttribute>(false))
+                        {
+                            result.AddRange(authenticators.Authenticators.Select(x => x.Type));
+                        }
+                        break;
+                    }
+                    baseType = controllerType.BaseType;
+                    if (baseType == null)
+                        break;
+
+                    controllerType = baseType.GetTypeInfo();
+                }
+            }
+            return result;
+        }
+        private CustomHandlerAttribute[] GetCustomHandlers(ControllerActionDescriptor controllerActionDescriptor)
+        {
+            List<CustomHandlerAttribute> result = new List<CustomHandlerAttribute>();
+            MethodInfo method = controllerActionDescriptor.MethodInfo;
+            if (method.HasAttribute<CustomHandlerAttribute>(false))
+            {
+                result.AddRange(method.GetCustomAttributes<CustomHandlerAttribute>(false));
+            }
+            else
+            {
+                Type baseType;
+                TypeInfo controllerType;
+                while (true)
+                {
+                    controllerType = controllerActionDescriptor.ControllerTypeInfo;
+                    if (controllerType.HasAttribute<CustomHandlerAttribute>(false))
+                    {
+                        result.AddRange(controllerType.GetCustomAttributes<CustomHandlerAttribute>(false));
+                        break;
+                    }
+                    baseType = controllerType.BaseType;
+                    if (baseType == null)
+                        break;
+
+                    controllerType = baseType.GetTypeInfo();
+                }
+            }
+            return result.ToArray();
+        }
+        private CustomHandlerAttribute[] GetCustomHandlers(CompiledPageActionDescriptor compiledPageActionDescriptor)
+        {
+            List<CustomHandlerAttribute> result = new List<CustomHandlerAttribute>();
+            HandlerMethodDescriptor methodDescriptor = compiledPageActionDescriptor.HandlerMethods.FirstOrDefault();
+            bool checkPageModel = true;
+            if (methodDescriptor != null)
+            {
+                MethodInfo method = methodDescriptor.MethodInfo;
+                if (method.HasAttribute<CustomHandlerAttribute>(false))
+                {
+                    result.AddRange(method.GetCustomAttributes<CustomHandlerAttribute>(false));
+                    checkPageModel = false;
+                }
+            }
+
+            if (checkPageModel)
+            {
+                Type baseType;
+                TypeInfo controllerType;
+                while (true)
+                {
+                    controllerType = compiledPageActionDescriptor.ModelTypeInfo;
+                    if (controllerType.HasAttribute<CustomHandlerAttribute>(false))
+                    {
+                        result.AddRange(controllerType.GetCustomAttributes<CustomHandlerAttribute>(false));
+                        break;
+                    }
+                    baseType = controllerType.BaseType;
+                    if (baseType == null)
+                        break;
+
+                    controllerType = baseType.GetTypeInfo();
+                }
+            }
+            return result.ToArray();
         }
     }
 }

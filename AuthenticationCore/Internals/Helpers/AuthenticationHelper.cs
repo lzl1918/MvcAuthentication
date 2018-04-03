@@ -473,7 +473,7 @@ namespace AuthenticationCore.Internals.Helpers
             return result;
         }
 
-        internal static IActionResult ExecuteHandler(Type handler, HttpContext httpContext, AuthenticationPolicy policy, Type[] customAuthenticators)
+        internal static IActionResult ExecuteHandler(Type handler, object[] constructParameters, HttpContext httpContext, AuthenticationPolicy policy, Type[] customAuthenticators)
         {
             IServiceProvider services = httpContext.RequestServices;
             MethodInfo method = handler.GetMethod("InvokeAsync", BindingFlags.Public | BindingFlags.DeclaredOnly | BindingFlags.Instance);
@@ -521,7 +521,7 @@ namespace AuthenticationCore.Internals.Helpers
                 Type returnType = methodInfo.ReturnType;
                 try
                 {
-                    object handler_instance = ActivatorUtilities.CreateInstance(services, handler);
+                    object handler_instance = ActivatorUtilities.CreateInstance(services, handler, constructParameters);
                     object invoke_result = methodInfo.Invoke(handler_instance, PrepareHandlerMethodParameters(methodInfo, services, httpContext, policy, customAuthenticators));
                     if (returnType.IsGenericType && returnType.GetGenericTypeDefinition().Equals(TASK_TYPE))
                     {
