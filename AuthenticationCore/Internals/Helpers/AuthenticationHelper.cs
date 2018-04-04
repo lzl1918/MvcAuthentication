@@ -1,4 +1,5 @@
 ﻿using AuthenticationCore.Authenticators;
+using AuthenticationCore.Internals.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
@@ -24,13 +25,9 @@ namespace AuthenticationCore.Internals.Helpers
 {
     internal static class AuthenticationHelper
     {
-        private static Type IUSER_TYPE { get; } = typeof(IUser);
-        private static Type TASK_TYPE { get; } = typeof(Task<int>).GetGenericTypeDefinition();
-        private static Type BASE_TASK_TYPE { get; } = typeof(Task);
-        private static Type IACTIONRESULT_TYPE { get; } = typeof(IActionResult);
-        private static Type VOID_TYPE { get; } = typeof(void);
-
-        internal static AuthenticatorMetadata CAS_AUTHENTICATOR { get; } = new AuthenticatorMetadata(typeof(CASAuthenticator), typeof(CASAuthenticator).GetMethod("Authenticate"));
+        private static AuthenticatorMetadata casAuthenticatorData = null;
+        private static object CASLocker = new object();
+        internal static readonly Type CASAuthenticator = typeof(CASAuthenticator);
 
         private const string AUTHENTICATION_RESULT_KEY = "AUTHENTICATION_RESULT";
         internal static void SaveAuthenticationResult(HttpContext httpContext, IAuthenticationResult authenticationResult)
@@ -50,42 +47,10 @@ namespace AuthenticationCore.Internals.Helpers
         }
 
         #region AUTHENTICATOR_EXECUTION
-        internal static bool IsValidAuthenticator(Type authenticator, out MethodInfo authenticateMethod)
+        internal static bool IsValidAuthenticator(IAuthenticatorMethodCache cache, Type authenticator, out AuthenticatorMetadata authenticateMethod)
         {
-            MethodInfo method = authenticator.GetMethod("AuthenticateAsync", BindingFlags.Public | BindingFlags.DeclaredOnly | BindingFlags.Instance);
-            if (method != null
-                && IsValidReturnType(method))
-            {
-                authenticateMethod = method;
-                return true;
-            }
-            method = authenticator.GetMethod("Authenticate", BindingFlags.Public | BindingFlags.DeclaredOnly | BindingFlags.Instance);
-            if (method != null
-                && IsValidReturnType(method))
-            {
-                authenticateMethod = method;
-                return true;
-            }
-            authenticateMethod = null;
-            return false;
-
-            bool IsValidReturnType(MethodInfo methodInfo)
-            {
-                Type returnType = methodInfo.ReturnType;
-                if (returnType.IsGenericType && returnType.GetGenericTypeDefinition().Equals(TASK_TYPE))
-                {
-                    Type innerType = returnType.GetGenericArguments()[0];
-                    if (IUSER_TYPE.IsAssignableFrom(innerType))
-                    {
-                        return true;
-                    }
-                }
-                else if (IUSER_TYPE.IsAssignableFrom(returnType))
-                {
-                    return true;
-                }
-                return false;
-            }
+            authenticateMethod = cache.Get(authenticator);
+            return authenticateMethod != null;
         }
         private static object[] PrepareMethodParameters(MethodInfo method, IServiceProvider services, HttpContext httpContext)
         {
@@ -125,23 +90,25 @@ namespace AuthenticationCore.Internals.Helpers
             {
                 object auth = ActivatorUtilities.CreateInstance(services, authenticator.Type);
                 object authenticate = authenticateMethod.Invoke(auth, PrepareMethodParameters(authenticateMethod, services, httpContext));
-                if (returnType.IsGenericType && returnType.GetGenericTypeDefinition().Equals(TASK_TYPE))
+                switch (authenticator.ReturnType)
                 {
-                    MethodInfo getAwaiterMethod = returnType.GetMethod("GetAwaiter", BindingFlags.Public | BindingFlags.Instance);
-                    object awaiter = getAwaiterMethod.Invoke(authenticate, null);
-                    Type awaiterType = awaiter.GetType();
-                    MethodInfo getResultMethod = awaiterType.GetMethod("GetResult", BindingFlags.Public | BindingFlags.Instance);
-                    IUser result = (IUser)getResultMethod.Invoke(awaiter, null);
-                    if (result == null)
-                        return null;
-                    return new AuthenticationInternalResult(false, null, result, authenticator);
-                }
-                else
-                {
-                    IUser result = (IUser)authenticate;
-                    if (result == null)
-                        return null;
-                    return new AuthenticationInternalResult(false, null, result, authenticator);
+                    case AuthenticateMethodReturnType.TaskWithIUser:
+                        {
+                            object awaiter = authenticator.GetAwaiter.Invoke(authenticate, null);
+                            IUser result = (IUser)authenticator.GetResult.Invoke(awaiter, null);
+                            if (result == null)
+                                return null;
+                            return new AuthenticationInternalResult(false, null, result, authenticator);
+                        }
+
+                    case AuthenticateMethodReturnType.IUser:
+                    default:
+                        {
+                            IUser result = (IUser)authenticate;
+                            if (result == null)
+                                return null;
+                            return new AuthenticationInternalResult(false, null, result, authenticator);
+                        }
                 }
             }
             catch (Exception ex)
@@ -150,65 +117,21 @@ namespace AuthenticationCore.Internals.Helpers
                 return null;
             }
         }
-        internal static AuthenticationInternalResult ExecuteCAS(HttpContext httpContext) => ExecuteAuthenticator(httpContext, CAS_AUTHENTICATOR);
+        internal static AuthenticationInternalResult ExecuteCAS(HttpContext httpContext)
+        {
+            lock (CASLocker)
+            {
+                if (casAuthenticatorData == null)
+                {
+                    IAuthenticatorMethodCache cache = httpContext.RequestServices.GetRequiredService<IAuthenticatorMethodCache>();
+                    casAuthenticatorData = cache.Get(typeof(CASAuthenticator));
+                }
+                return ExecuteAuthenticator(httpContext, casAuthenticatorData);
+            }
+        }
         #endregion AUTHENTICATOR_EXECUTION
 
         #region AUTHENTICATION_EXECUTE
-        private enum AuthenticationDeclaration
-        {
-            No,
-            Action,
-            Controller
-        }
-        private static AuthenticationDeclaration IsAuthenticationRequired(ControllerActionDescriptor actionDescriptor, out AuthenticationRequiredAttribute authAttribute)
-        {
-            AuthenticationRequiredAttribute[] authRequired = actionDescriptor.MethodInfo.GetAttributes<AuthenticationRequiredAttribute>(false);
-            if (authRequired.Length > 0)
-            {
-                authAttribute = authRequired[0];
-                if (authAttribute.Policy == AuthenticationPolicy.NoAuthentication)
-                    return AuthenticationDeclaration.No;
-                return AuthenticationDeclaration.Action;
-            }
-
-            authRequired = actionDescriptor.ControllerTypeInfo.GetAttributes<AuthenticationRequiredAttribute>(true);
-            if (authRequired.Length > 0)
-            {
-                authAttribute = authRequired[0];
-                if (authAttribute.Policy == AuthenticationPolicy.NoAuthentication)
-                    return AuthenticationDeclaration.No;
-                return AuthenticationDeclaration.Controller;
-            }
-
-            authAttribute = null;
-            return AuthenticationDeclaration.No;
-        }
-        private static AuthenticationDeclaration IsAuthenticationRequired(CompiledPageActionDescriptor actionDescriptor, out AuthenticationRequiredAttribute authAttribute)
-        {
-            HandlerMethodDescriptor handler = actionDescriptor.HandlerMethods.FirstOrDefault();
-            AuthenticationRequiredAttribute[] authRequired;
-            if (handler != null)
-            {
-                authRequired = handler.MethodInfo.GetAttributes<AuthenticationRequiredAttribute>(false);
-                if (authRequired.Length > 0)
-                {
-                    authAttribute = authRequired[0];
-                    if (authAttribute.Policy == AuthenticationPolicy.NoAuthentication)
-                        return AuthenticationDeclaration.No;
-                    return AuthenticationDeclaration.Action;
-                }
-            }
-            authRequired = actionDescriptor.ModelTypeInfo.GetAttributes<AuthenticationRequiredAttribute>(true);
-            if (authRequired.Length > 0)
-            {
-                authAttribute = authRequired[0];
-                if (authAttribute.Policy == AuthenticationPolicy.NoAuthentication)
-                    return AuthenticationDeclaration.No;
-                return AuthenticationDeclaration.Controller;
-            }
-            authAttribute = null;
-            return AuthenticationDeclaration.No;
-        }
 
         // if casResult == null, the url does not contain ticket
         private static void CheckRequestUrl(HttpContext httpContext, out AuthenticationInternalResult casResult)
@@ -239,9 +162,13 @@ namespace AuthenticationCore.Internals.Helpers
                 try
                 {
                     HttpClient client = new HttpClient();
-                    client.DefaultRequestHeaders.Accept.Clear();
-                    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(option.ResponseAccept));
-                    using (HttpResponseMessage response = client.GetAsync(target).GetAwaiter().GetResult())
+                    HttpRequestMessage validateRequest = new HttpRequestMessage()
+                    {
+                        Method = HttpMethod.Get,
+                        RequestUri = new Uri(target)
+                    };
+                    validateRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue(option.ResponseAccept));
+                    using (HttpResponseMessage response = client.SendAsync(validateRequest).GetAwaiter().GetResult())
                     {
                         if (response.StatusCode == System.Net.HttpStatusCode.OK)
                         {
@@ -261,7 +188,15 @@ namespace AuthenticationCore.Internals.Helpers
                             }
                             else
                             {
-                                casResult = new AuthenticationInternalResult(false, null, user, CAS_AUTHENTICATOR);
+                                lock (CASLocker)
+                                {
+                                    if (casAuthenticatorData == null)
+                                    {
+                                        IAuthenticatorMethodCache cache = httpContext.RequestServices.GetRequiredService<IAuthenticatorMethodCache>();
+                                        casAuthenticatorData = cache.Get(typeof(CASAuthenticator));
+                                    }
+                                }
+                                casResult = new AuthenticationInternalResult(false, null, user, casAuthenticatorData);
                                 return;
                             }
                         }
@@ -380,7 +315,9 @@ namespace AuthenticationCore.Internals.Helpers
                 return result;
 
             // then, check if the action needs authorization
-            AuthenticationDeclaration declaration = IsAuthenticationRequired(actionDescriptor, out AuthenticationRequiredAttribute authAttribute);
+            IAuthenticationDeclarationCache cache = httpContext.RequestServices.GetRequiredService<IAuthenticationDeclarationCache>();
+            AuthenticationDeclarationInfo declarationInfo = cache.Get(actionDescriptor);
+            AuthenticationDeclaration declaration = declarationInfo.Declaration;
 
             if (declaration == AuthenticationDeclaration.No)
             {
@@ -393,8 +330,7 @@ namespace AuthenticationCore.Internals.Helpers
             else
                 attributeProvider = actionDescriptor.ControllerTypeInfo;
 
-            ISession session = httpContext.Session;
-            return Authenticate(httpContext, authAttribute, attributeProvider);
+            return Authenticate(httpContext, declarationInfo.Attribute, attributeProvider);
         }
         internal static AuthenticationInternalResult AuthenticateRazorPage(CompiledPageActionDescriptor actionDescriptor, HttpContext httpContext)
         {
@@ -404,21 +340,21 @@ namespace AuthenticationCore.Internals.Helpers
                 return result;
 
             // then, check if the action needs authorization
-            AuthenticationDeclaration declaration = IsAuthenticationRequired(actionDescriptor, out AuthenticationRequiredAttribute authAttribute);
-
+            IAuthenticationDeclarationCache cache = httpContext.RequestServices.GetRequiredService<IAuthenticationDeclarationCache>();
+            AuthenticationDeclarationInfo declarationInfo = cache.Get(actionDescriptor);
+            AuthenticationDeclaration declaration = declarationInfo.Declaration;
             if (declaration == AuthenticationDeclaration.No)
             {
                 return new AuthenticationInternalResult(true, null, null, null);
             }
 
             ICustomAttributeProvider attributeProvider = null;
-            if (declaration == AuthenticationDeclaration.Action)
-                attributeProvider = actionDescriptor.HandlerMethods.First().MethodInfo;
+            if (declaration == AuthenticationDeclaration.HandlerMethod)
+                attributeProvider = actionDescriptor.HandlerMethods[0].MethodInfo;
             else
                 attributeProvider = actionDescriptor.ModelTypeInfo;
 
-            ISession session = httpContext.Session;
-            return Authenticate(httpContext, authAttribute, attributeProvider);
+            return Authenticate(httpContext, declarationInfo.Attribute, attributeProvider);
         }
 
         internal static AuthenticationInternalResult Authenticate(AuthorizationFilterContext context)
@@ -476,84 +412,54 @@ namespace AuthenticationCore.Internals.Helpers
         internal static IActionResult ExecuteHandler(Type handler, object[] constructParameters, HttpContext httpContext, AuthenticationPolicy policy, Type[] customAuthenticators)
         {
             IServiceProvider services = httpContext.RequestServices;
-            MethodInfo method = handler.GetMethod("InvokeAsync", BindingFlags.Public | BindingFlags.DeclaredOnly | BindingFlags.Instance);
-            if (method != null
-                && IsValidReturnType(method))
-            {
-                return ExecuteMethod(method);
-            }
+            IHandlerInvokeMethodCache cache = services.GetRequiredService<IHandlerInvokeMethodCache>();
+            InvokeMethodInfo methodInfo = cache.Get(handler);
+            if (methodInfo != null)
+                return ExecuteMethod(methodInfo);
 
-            method = handler.GetMethod("Invoke", BindingFlags.Public | BindingFlags.DeclaredOnly | BindingFlags.Instance);
-            if (method != null
-                && IsValidReturnType(method))
-            {
-                return ExecuteMethod(method);
-            }
             return null;
 
-            bool IsValidReturnType(MethodInfo methodInfo)
+            IActionResult ExecuteMethod(InvokeMethodInfo info)
             {
-                Type returnType = methodInfo.ReturnType;
-                if (returnType.IsGenericType && returnType.GetGenericTypeDefinition().Equals(TASK_TYPE))
-                {
-                    Type innerType = returnType.GetGenericArguments()[0];
-                    if (IACTIONRESULT_TYPE.IsAssignableFrom(innerType))
-                    {
-                        return true;
-                    }
-                }
-                else if (BASE_TASK_TYPE.IsAssignableFrom(returnType))
-                {
-                    return true;
-                }
-                else if (returnType.Equals(VOID_TYPE))
-                {
-                    return true;
-                }
-                else if (IACTIONRESULT_TYPE.IsAssignableFrom(returnType))
-                {
-                    return true;
-                }
-                return false;
-            }
-            IActionResult ExecuteMethod(MethodInfo methodInfo)
-            {
-                Type returnType = methodInfo.ReturnType;
                 try
                 {
+                    MethodInfo method = info.Method;
                     object handler_instance = ActivatorUtilities.CreateInstance(services, handler, constructParameters);
-                    object invoke_result = methodInfo.Invoke(handler_instance, PrepareHandlerMethodParameters(methodInfo, services, httpContext, policy, customAuthenticators));
-                    if (returnType.IsGenericType && returnType.GetGenericTypeDefinition().Equals(TASK_TYPE))
+                    object invoke_result = method.Invoke(handler_instance, PrepareHandlerMethodParameters(method, services, httpContext, policy, customAuthenticators));
+                    switch (info.ReturnType)
                     {
-                        MethodInfo getAwaiterMethod = returnType.GetMethod("GetAwaiter", BindingFlags.Public | BindingFlags.Instance);
-                        object awaiter = getAwaiterMethod.Invoke(invoke_result, null);
-                        Type awaiterType = awaiter.GetType();
-                        MethodInfo getResultMethod = awaiterType.GetMethod("GetResult", BindingFlags.Public | BindingFlags.Instance);
-                        IActionResult result = (IActionResult)getResultMethod.Invoke(awaiter, null);
-                        if (result == null)
+                        case InvokeMethodReturnType.Void:
                             return null;
-                        return result;
-                    }
-                    else if (BASE_TASK_TYPE.IsAssignableFrom(returnType))
-                    {
-                        Task result = (Task)invoke_result;
-                        if (result == null)
-                            return null;
-                        if (result.Status == TaskStatus.WaitingToRun || result.Status == TaskStatus.Created)
-                            result.Start();
-                        result.Wait();
-                        return null;
-                    }
-                    else if (returnType.Equals(VOID_TYPE))
-                    {
-                        return null;
-                    }
-                    else
-                    {
-                        IActionResult result = (IActionResult)invoke_result;
-                        if (result == null)
-                            return null;
-                        return result;
+
+                        case InvokeMethodReturnType.Task:
+                            {
+                                Task result = (Task)invoke_result;
+                                if (result == null)
+                                    return null;
+                                if (result.Status == TaskStatus.WaitingToRun || result.Status == TaskStatus.Created)
+                                    result.Start();
+                                result.Wait();
+                                return null;
+                            }
+
+                        case InvokeMethodReturnType.TaskWithIActionResult:
+                            {
+                                object awaiter = info.GetAwaiter.Invoke(invoke_result, null);
+                                IActionResult result = (IActionResult)info.GetResult.Invoke(awaiter, null);
+                                if (result == null)
+                                    return null;
+                                return result;
+                            }
+
+                        case InvokeMethodReturnType.IActionResult:
+                        default:
+                            {
+                                IActionResult result = (IActionResult)invoke_result;
+                                if (result == null)
+                                    return null;
+                                return result;
+                            }
+
                     }
                 }
                 catch (Exception ex)

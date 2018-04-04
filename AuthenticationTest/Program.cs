@@ -22,7 +22,7 @@ namespace AuthenticationTest
                 .UseStartup<Startup>()
                 .ConfigureAppConfiguration(configurationBuilder =>
                 {
-                    configurationBuilder.AddJsonFile("CASOption.json");
+                    configurationBuilder.AddJsonFile("CASOption.json", true);
                 })
                 .Build();
     }

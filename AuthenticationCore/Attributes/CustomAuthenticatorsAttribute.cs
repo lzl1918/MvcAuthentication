@@ -1,8 +1,10 @@
 ﻿using AuthenticationCore.Internals;
 using AuthenticationCore.Internals.Helpers;
+using AuthenticationCore.Internals.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -19,32 +21,31 @@ namespace AuthenticationCore
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
     public class CustomAuthenticatorsAttribute : Attribute
     {
+        private readonly Type[] authenticators;
         internal CustomAuthenticatorExecutionPolicy ExecutionPolicy { get; }
-        internal AuthenticatorMetadata[] Authenticators { get; }
+        internal Type[] Authenticators => authenticators;
 
         public CustomAuthenticatorsAttribute(CustomAuthenticatorExecutionPolicy policy = CustomAuthenticatorExecutionPolicy.BeforeCAS, params Type[] authenticators)
         {
             ExecutionPolicy = policy;
-            List<AuthenticatorMetadata> metadata = new List<AuthenticatorMetadata>();
-            foreach (Type authenticator in authenticators)
-            {
-                if (AuthenticationHelper.IsValidAuthenticator(authenticator, out MethodInfo authenticateMethod))
-                {
-                    metadata.Add(new AuthenticatorMetadata(authenticator, authenticateMethod));
-                }
-            }
-            Authenticators = metadata.ToArray();
+            this.authenticators = authenticators;
         }
 
         internal AuthenticationInternalResult Authenticate(HttpContext httpContext)
         {
-            if (Authenticators.Length <= 0)
+            if (authenticators.Length <= 0)
                 return null;
-            foreach (AuthenticatorMetadata authenticator in Authenticators)
+
+            IAuthenticatorMethodCache cache = httpContext.RequestServices.GetRequiredService<IAuthenticatorMethodCache>();
+            foreach (Type authenticator in authenticators)
             {
-                AuthenticationInternalResult result = AuthenticationHelper.ExecuteAuthenticator(httpContext, authenticator);
-                if (result != null)
-                    return result;
+                if (AuthenticationHelper.IsValidAuthenticator(cache, authenticator, out AuthenticatorMetadata metadata))
+                {
+                    AuthenticationInternalResult result = AuthenticationHelper.ExecuteAuthenticator(httpContext, metadata);
+                    if (result != null)
+                        return result;
+                }
+
             }
             return null;
         }

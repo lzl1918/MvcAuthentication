@@ -5,8 +5,10 @@ using System.Text;
 using System.Threading.Tasks;
 using AuthenticationCore.Internals.Helpers;
 using AuthenticationCore.Internals.ResponseResults;
+using AuthenticationCore.Internals.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AuthenticationCore.Internals
 {
@@ -31,9 +33,9 @@ namespace AuthenticationCore.Internals
                 AuthenticationInternalResult result = null;
                 foreach (Type authenticator in authenticators)
                 {
-                    if (AuthenticationHelper.IsValidAuthenticator(authenticator, out MethodInfo authenticateMethod))
+                    if (AuthenticationHelper.IsValidAuthenticator(httpContext.RequestServices.GetRequiredService<IAuthenticatorMethodCache>(), authenticator, out AuthenticatorMetadata authenticateMethod))
                     {
-                        result = AuthenticationHelper.ExecuteAuthenticator(httpContext, new AuthenticatorMetadata(authenticator, authenticateMethod));
+                        result = AuthenticationHelper.ExecuteAuthenticator(httpContext, authenticateMethod);
                         if (result != null && result.KeepUnauthenticated == false && result.User != null)
                         {
                             IAuthenticationResult authentication = AuthenticationResult.CAS(result.User);

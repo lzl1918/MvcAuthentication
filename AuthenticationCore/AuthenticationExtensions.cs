@@ -1,4 +1,5 @@
 ﻿using AuthenticationCore.Internals;
+using AuthenticationCore.Internals.Services;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -9,7 +10,14 @@ namespace AuthenticationCore
 {
     public static class AuthenticationExtensions
     {
-        public static IServiceCollection AddMvcAuthentication(this IServiceCollection services, string redirectUrl, string validateUrl, string sessionName, Type responseHandler, string responseAccept = "application/json")
+        public static IServiceCollection AddMvcAuthentication(
+            this IServiceCollection services,
+            string redirectUrl,
+            string validateUrl,
+            string sessionName,
+            Type responseHandler,
+            string responseAccept = "application/json",
+            int cacheCapacity = 100)
         {
             if (responseHandler.GetInterface(typeof(ICASResponseHandler).FullName) == null)
                 throw new InvalidOperationException($"type {responseHandler.Name} does not implement interface {typeof(ICASResponseHandler).Name}");
@@ -18,6 +26,12 @@ namespace AuthenticationCore
             services.AddScoped<IAuthenticationResult, LateBoundAuthenticationResult>();
             services.AddScoped<IAuthenticationService, AuthenticationService>();
             services.AddSingleton<ICASOption>(new CASOption(redirectUrl, validateUrl, sessionName, responseAccept, responseHandler));
+
+
+            services.AddSingleton<IHandlerInvokeMethodCache>(new HandlerInvokeMethodCache(capacity: cacheCapacity));
+            services.AddSingleton<IAuthenticationDeclarationCache>(new AuthenticationDeclarationCache(capacity: cacheCapacity));
+            services.AddSingleton<IAuthenticatorMethodCache>(new AuthenticatorMethodCache(capacity: cacheCapacity));
+
             return services;
         }
 

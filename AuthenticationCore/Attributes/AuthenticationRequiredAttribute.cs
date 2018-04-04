@@ -31,7 +31,6 @@ namespace AuthenticationCore
 
         public void OnAuthorization(AuthorizationFilterContext context)
         {
-            Debug.WriteLine("on authorization: " + context.ActionDescriptor.DisplayName, "AUTH");
             HttpContext httpContext = context.HttpContext;
             AuthenticationInternalResult authresult = AuthenticationHelper.Authenticate(context);
             if (authresult != null)
@@ -117,7 +116,7 @@ namespace AuthenticationCore
             {
                 foreach (CustomAuthenticatorsAttribute authenticators in method.GetAttributes<CustomAuthenticatorsAttribute>(false))
                 {
-                    result.AddRange(authenticators.Authenticators.Select(x => x.Type));
+                    result.AddRange(authenticators.Authenticators);
                 }
             }
             else
@@ -131,7 +130,7 @@ namespace AuthenticationCore
                     {
                         foreach (CustomAuthenticatorsAttribute authenticators in controllerType.GetAttributes<CustomAuthenticatorsAttribute>(false))
                         {
-                            result.AddRange(authenticators.Authenticators.Select(x => x.Type));
+                            result.AddRange(authenticators.Authenticators);
                         }
                         break;
                     }
@@ -147,7 +146,7 @@ namespace AuthenticationCore
         private List<Type> GetCustomAuthenticators(CompiledPageActionDescriptor compiledPageActionDescriptor)
         {
             List<Type> result = new List<Type>();
-            HandlerMethodDescriptor methodDescriptor = compiledPageActionDescriptor.HandlerMethods.FirstOrDefault();
+            HandlerMethodDescriptor methodDescriptor = compiledPageActionDescriptor.HandlerMethods[0];
             bool checkPageModel = true;
             if (methodDescriptor != null)
             {
@@ -156,7 +155,7 @@ namespace AuthenticationCore
                 {
                     foreach (CustomAuthenticatorsAttribute authenticators in method.GetAttributes<CustomAuthenticatorsAttribute>(false))
                     {
-                        result.AddRange(authenticators.Authenticators.Select(x => x.Type));
+                        result.AddRange(authenticators.Authenticators);
                     }
                     checkPageModel = false;
                 }
@@ -173,7 +172,7 @@ namespace AuthenticationCore
                     {
                         foreach (CustomAuthenticatorsAttribute authenticators in controllerType.GetAttributes<CustomAuthenticatorsAttribute>(false))
                         {
-                            result.AddRange(authenticators.Authenticators.Select(x => x.Type));
+                            result.AddRange(authenticators.Authenticators);
                         }
                         break;
                     }
@@ -218,7 +217,7 @@ namespace AuthenticationCore
         private CustomHandlerAttribute[] GetCustomHandlers(CompiledPageActionDescriptor compiledPageActionDescriptor)
         {
             List<CustomHandlerAttribute> result = new List<CustomHandlerAttribute>();
-            HandlerMethodDescriptor methodDescriptor = compiledPageActionDescriptor.HandlerMethods.FirstOrDefault();
+            HandlerMethodDescriptor methodDescriptor = compiledPageActionDescriptor.HandlerMethods[0];
             bool checkPageModel = true;
             if (methodDescriptor != null)
             {

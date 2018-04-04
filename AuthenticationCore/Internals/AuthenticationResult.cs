@@ -27,10 +27,10 @@ namespace AuthenticationCore.Internals
         }
 
         internal static IAuthenticationResult Unauthenticated() => new AuthenticationResult(false, false, null, null);
-        internal static IAuthenticationResult CAS(IUser user) => new AuthenticationResult(true, true, AuthenticationHelper.CAS_AUTHENTICATOR.Type, user);
+        internal static IAuthenticationResult CAS(IUser user) => new AuthenticationResult(true, true, AuthenticationHelper.CASAuthenticator, user);
         internal static IAuthenticationResult Authenticated(Type authenticator, IUser user)
         {
-            if (authenticator.Equals(AuthenticationHelper.CAS_AUTHENTICATOR))
+            if (authenticator.Equals(AuthenticationHelper.CASAuthenticator))
                 return CAS(user);
 
             return new AuthenticationResult(true, false, authenticator, user);
