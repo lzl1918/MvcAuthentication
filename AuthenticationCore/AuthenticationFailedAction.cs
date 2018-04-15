@@ -10,7 +10,7 @@ namespace AuthenticationCore
     {
         KeepUnauthenticated,
         RedirectCAS,
-        Return401,
+        Return403,
         CustomHandler
     }
 }

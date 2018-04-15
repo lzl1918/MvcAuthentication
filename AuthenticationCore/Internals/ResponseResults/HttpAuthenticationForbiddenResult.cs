@@ -7,7 +7,7 @@ namespace AuthenticationCore.Internals.ResponseResults
     {
         public Task ExecuteResultAsync(ActionContext context)
         {
-            context.HttpContext.Response.StatusCode = 401;
+            context.HttpContext.Response.StatusCode = 403;
             return Task.CompletedTask;
         }
     }

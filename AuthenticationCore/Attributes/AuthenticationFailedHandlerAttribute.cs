@@ -13,12 +13,12 @@ namespace AuthenticationCore
 {
 
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
-    public class CustomHandlerAttribute : Attribute
+    public class AuthenticationFailedHandlerAttribute : Attribute
     {
         internal object[] ConstructParameters { get; }
         internal Type Handler { get; }
 
-        public CustomHandlerAttribute(Type handler, params object[] constructParameters)
+        public AuthenticationFailedHandlerAttribute(Type handler, params object[] constructParameters)
         {
             Handler = handler;
             ConstructParameters = constructParameters;

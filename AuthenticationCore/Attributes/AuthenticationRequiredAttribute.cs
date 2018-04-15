@@ -68,14 +68,14 @@ namespace AuthenticationCore
                     context.Result = new HttpCASRedirectResult();
                     return;
 
-                case AuthenticationFailedAction.Return401:
+                case AuthenticationFailedAction.Return403:
                     context.Result = new HttpAuthenticationForbiddenResult();
                     return;
 
                 case AuthenticationFailedAction.CustomHandler:
                     {
                         List<Type> customAuthenticators = null;
-                        CustomHandlerAttribute[] handlers = null;
+                        AuthenticationFailedHandlerAttribute[] handlers = null;
                         switch (context.ActionDescriptor)
                         {
                             case ControllerActionDescriptor controllerActionDescriptor:
@@ -185,13 +185,13 @@ namespace AuthenticationCore
             }
             return result;
         }
-        private CustomHandlerAttribute[] GetCustomHandlers(ControllerActionDescriptor controllerActionDescriptor)
+        private AuthenticationFailedHandlerAttribute[] GetCustomHandlers(ControllerActionDescriptor controllerActionDescriptor)
         {
-            List<CustomHandlerAttribute> result = new List<CustomHandlerAttribute>();
+            List<AuthenticationFailedHandlerAttribute> result = new List<AuthenticationFailedHandlerAttribute>();
             MethodInfo method = controllerActionDescriptor.MethodInfo;
-            if (method.HasAttribute<CustomHandlerAttribute>(false))
+            if (method.HasAttribute<AuthenticationFailedHandlerAttribute>(false))
             {
-                result.AddRange(method.GetCustomAttributes<CustomHandlerAttribute>(false));
+                result.AddRange(method.GetCustomAttributes<AuthenticationFailedHandlerAttribute>(false));
             }
             else
             {
@@ -200,9 +200,9 @@ namespace AuthenticationCore
                 while (true)
                 {
                     controllerType = controllerActionDescriptor.ControllerTypeInfo;
-                    if (controllerType.HasAttribute<CustomHandlerAttribute>(false))
+                    if (controllerType.HasAttribute<AuthenticationFailedHandlerAttribute>(false))
                     {
-                        result.AddRange(controllerType.GetCustomAttributes<CustomHandlerAttribute>(false));
+                        result.AddRange(controllerType.GetCustomAttributes<AuthenticationFailedHandlerAttribute>(false));
                         break;
                     }
                     baseType = controllerType.BaseType;
@@ -214,17 +214,17 @@ namespace AuthenticationCore
             }
             return result.ToArray();
         }
-        private CustomHandlerAttribute[] GetCustomHandlers(CompiledPageActionDescriptor compiledPageActionDescriptor)
+        private AuthenticationFailedHandlerAttribute[] GetCustomHandlers(CompiledPageActionDescriptor compiledPageActionDescriptor)
         {
-            List<CustomHandlerAttribute> result = new List<CustomHandlerAttribute>();
+            List<AuthenticationFailedHandlerAttribute> result = new List<AuthenticationFailedHandlerAttribute>();
             HandlerMethodDescriptor methodDescriptor = compiledPageActionDescriptor.HandlerMethods[0];
             bool checkPageModel = true;
             if (methodDescriptor != null)
             {
                 MethodInfo method = methodDescriptor.MethodInfo;
-                if (method.HasAttribute<CustomHandlerAttribute>(false))
+                if (method.HasAttribute<AuthenticationFailedHandlerAttribute>(false))
                 {
-                    result.AddRange(method.GetCustomAttributes<CustomHandlerAttribute>(false));
+                    result.AddRange(method.GetCustomAttributes<AuthenticationFailedHandlerAttribute>(false));
                     checkPageModel = false;
                 }
             }
@@ -236,9 +236,9 @@ namespace AuthenticationCore
                 while (true)
                 {
                     controllerType = compiledPageActionDescriptor.ModelTypeInfo;
-                    if (controllerType.HasAttribute<CustomHandlerAttribute>(false))
+                    if (controllerType.HasAttribute<AuthenticationFailedHandlerAttribute>(false))
                     {
-                        result.AddRange(controllerType.GetCustomAttributes<CustomHandlerAttribute>(false));
+                        result.AddRange(controllerType.GetCustomAttributes<AuthenticationFailedHandlerAttribute>(false));
                         break;
                     }
                     baseType = controllerType.BaseType;

@@ -3,9 +3,8 @@ using Microsoft.AspNetCore.Http;
 using System;
 using System.Security.Claims;
 
-namespace AuthenticationCore
+namespace AuthenticationCore.Internals
 {
-
     internal interface IAuthenticationResultAccessor
     {
         IAuthenticationResult Result { get; set; }
