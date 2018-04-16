@@ -14,6 +14,7 @@ namespace AuthenticationCore
             this IServiceCollection services,
             string redirectUrl,
             string validateUrl,
+            string logoutUrl,
             string sessionName,
             Type responseHandler,
             string responseAccept = "application/json",
@@ -25,7 +26,7 @@ namespace AuthenticationCore
             services.AddScoped<IAuthenticationResultAccessor, AuthenticationResultAccessor>();
             services.AddScoped<IAuthenticationResult, LateBoundAuthenticationResult>();
             services.AddScoped<IAuthenticationService, AuthenticationService>();
-            services.AddSingleton<ICASOption>(new CASOption(redirectUrl, validateUrl, sessionName, responseAccept, responseHandler));
+            services.AddSingleton<ICASOption>(new CASOption(redirectUrl, validateUrl, logoutUrl, sessionName, responseAccept, responseHandler));
 
 
             services.AddSingleton<IHandlerInvokeMethodCache>(new HandlerInvokeMethodCache(capacity: cacheCapacity));
@@ -35,14 +36,14 @@ namespace AuthenticationCore
             return services;
         }
 
-        public static IServiceCollection AddMvcAuthentication<T>(this IServiceCollection services, string redirectUrl, string validateUrl, string sessionName, string responseAccept = "application/json") where T : ICASResponseHandler
+        public static IServiceCollection AddMvcAuthentication<T>(this IServiceCollection services, string redirectUrl, string validateUrl, string logoutUrl, string sessionName, string responseAccept = "application/json") where T : ICASResponseHandler
         {
-            return AddMvcAuthentication(services, redirectUrl, validateUrl, sessionName, typeof(T), responseAccept);
+            return AddMvcAuthentication(services, redirectUrl, validateUrl, logoutUrl, sessionName, typeof(T), responseAccept);
         }
 
-        public static IServiceCollection AddMvcAuthentication(this IServiceCollection services, string redirectUrl, string validateUrl, string sessionName, string responseAccept = "application/json")
+        public static IServiceCollection AddMvcAuthentication(this IServiceCollection services, string redirectUrl, string validateUrl, string logoutUrl, string sessionName, string responseAccept = "application/json")
         {
-            return AddMvcAuthentication(services, redirectUrl, validateUrl, sessionName, typeof(DefaultCASResponseHandler), responseAccept);
+            return AddMvcAuthentication(services, redirectUrl, validateUrl, logoutUrl, sessionName, typeof(DefaultCASResponseHandler), responseAccept);
         }
     }
 }

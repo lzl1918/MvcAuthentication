@@ -137,7 +137,7 @@ namespace AuthenticationCore.Internals.Helpers
         private static void CheckRequestUrl(HttpContext httpContext, out AuthenticationInternalResult casResult)
         {
             HttpRequest request = httpContext.Request;
-            ICASOption option = (ICASOption)httpContext.RequestServices.GetService(typeof(ICASOption));
+            ICASOption option = httpContext.RequestServices.GetRequiredService<ICASOption>();
             IQueryCollection query = request.Query;
             string rawurl = request.GetDisplayUrl();
             if (query.TryGetValue("ticket", out StringValues ticketValue))

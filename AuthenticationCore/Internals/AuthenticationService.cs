@@ -75,5 +75,22 @@ namespace AuthenticationCore.Internals
         {
             return new HttpCASRedirectResult();
         }
+
+        public IActionResult CreateRedirectLogoutResult(string target)
+        {
+            return new HttpCASLogoutRedirectResult(target);
+        }
+        public IActionResult CreateRedirectLogoutResult()
+        {
+            return new HttpCASLogoutRedirectResult();
+        }
+
+        public void RemoveCASSession()
+        {
+            HttpContext context = httpContextAccessor.HttpContext;
+            IServiceProvider services = context.RequestServices;
+            ICASOption option = services.GetRequiredService<ICASOption>();
+            context.Session.Remove(option.SessionName);
+        }
     }
 }

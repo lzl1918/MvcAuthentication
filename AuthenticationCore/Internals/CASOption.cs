@@ -8,11 +8,12 @@ namespace AuthenticationCore.Internals
     {
         public string RedirectUrl { get; }
         public string ValidateUrl { get; }
+        public string LogoutUrl { get; }
         public string SessionName { get; }
         public string ResponseAccept { get; }
         public Type ResponseHandler { get; }
 
-        public CASOption(string redirectUrl, string validateUrl, string sessionName, string responseAccept, Type responseHandlerType)
+        public CASOption(string redirectUrl, string validateUrl, string logoutUrl, string sessionName, string responseAccept, Type responseHandlerType)
         {
             if (validateUrl == null)
                 throw new ArgumentNullException(nameof(validateUrl));
@@ -26,11 +27,15 @@ namespace AuthenticationCore.Internals
             if (responseAccept == null)
                 throw new ArgumentNullException(nameof(responseAccept));
 
+            if (logoutUrl == null)
+                throw new ArgumentNullException(nameof(logoutUrl));
+
             if (responseHandlerType.GetInterface(typeof(ICASResponseHandler).FullName) == null)
                 throw new InvalidOperationException($"type {responseHandlerType.Name} does not implement interface {typeof(ICASResponseHandler).Name}");
 
             RedirectUrl = redirectUrl;
             ValidateUrl = validateUrl;
+            LogoutUrl = logoutUrl;
             SessionName = sessionName;
             ResponseAccept = responseAccept;
             ResponseHandler = responseHandlerType;

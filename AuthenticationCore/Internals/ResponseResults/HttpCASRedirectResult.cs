@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using System.Threading.Tasks;
 
 namespace AuthenticationCore.Internals.ResponseResults
@@ -12,7 +13,7 @@ namespace AuthenticationCore.Internals.ResponseResults
         public Task ExecuteResultAsync(ActionContext context)
         {
             HttpContext httpContext = context.HttpContext;
-            ICASOption option = (ICASOption)httpContext.RequestServices.GetService(typeof(ICASOption));
+            ICASOption option = httpContext.RequestServices.GetRequiredService<ICASOption>();
             HttpRequest request = httpContext.Request;
 
             string serviceTarget = request.GetDisplayUrl().EscapeAll();

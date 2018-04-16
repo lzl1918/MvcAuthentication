@@ -11,7 +11,7 @@ namespace AuthenticationCore
     {
         public IUser Invoke(HttpContext httpContext, string message, string actionUrl, out string redirectUrl)
         {
-            ICASOption option = httpContext.RequestServices.GetService<ICASOption>();
+            ICASOption option = httpContext.RequestServices.GetRequiredService<ICASOption>();
             string[] res = message.Split('\n');
             if (res[0] == "yes")
             {

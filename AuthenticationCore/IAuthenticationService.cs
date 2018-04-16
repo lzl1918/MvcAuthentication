@@ -15,5 +15,9 @@ namespace AuthenticationCore
             bool saveResult = false);
 
         IActionResult CreateRedirectCASResult();
+
+        void RemoveCASSession();
+        IActionResult CreateRedirectLogoutResult(string target);
+        IActionResult CreateRedirectLogoutResult();
     }
 }

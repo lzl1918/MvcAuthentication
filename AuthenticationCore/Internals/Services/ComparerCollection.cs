@@ -46,8 +46,8 @@ namespace AuthenticationCore.Internals.Services
         {
             public int Compare(CompiledPageActionDescriptor x, CompiledPageActionDescriptor y)
             {
-                string xName = $"{x.ModelTypeInfo.FullName}.{x.HandlerMethods[0].Name}";
-                string yName = $"{y.ModelTypeInfo.FullName}.{y.HandlerMethods[0].Name}";
+                string xName = $"{x.ModelTypeInfo.FullName}.{x.HandlerMethods[0].MethodInfo.Name}";
+                string yName = $"{y.ModelTypeInfo.FullName}.{y.HandlerMethods[0].MethodInfo.Name}";
                 return xName.CompareTo(yName);
             }
 
