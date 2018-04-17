@@ -37,7 +37,6 @@ namespace AuthenticationCore.Internals.Services
 
     internal sealed class HandlerInvokeMethodCache : IHandlerInvokeMethodCache
     {
-
         private ICache<Type, InvokeMethodInfo> cache;
 
         public HandlerInvokeMethodCache(int capacity)

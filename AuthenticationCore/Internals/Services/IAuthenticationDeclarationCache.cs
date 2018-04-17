@@ -37,23 +37,33 @@ namespace AuthenticationCore.Internals.Services
     }
     internal sealed class AuthenticationDeclarationCache : IAuthenticationDeclarationCache
     {
-        private ICache<ControllerActionDescriptor, AuthenticationDeclarationInfo> mvcCache;
-        private ICache<CompiledPageActionDescriptor, AuthenticationDeclarationInfo> pageCache;
+        private ICache<string, AuthenticationDeclarationInfo> mvcCache;
+        private ICache<string, AuthenticationDeclarationInfo> pageCache;
+        private object mvcLocker = new object();
+        private object pageLocker = new object();
 
         public AuthenticationDeclarationCache(int capacity)
         {
-            mvcCache = new Cache<ControllerActionDescriptor, AuthenticationDeclarationInfo>(capacity, ComparerCollection.ControllerActionDescriptorComparer, ComparerCollection.ControllerActionDescriptorEqualityComparer);
-            pageCache = new Cache<CompiledPageActionDescriptor, AuthenticationDeclarationInfo>(capacity, ComparerCollection.CompiledPageActionDescriptorComparer, ComparerCollection.CompiledPageActionDescriptorEqualityComparer);
+            mvcCache = new Cache<string, AuthenticationDeclarationInfo>(capacity);
+            pageCache = new Cache<string, AuthenticationDeclarationInfo>(capacity);
         }
 
         public AuthenticationDeclarationInfo Get(ControllerActionDescriptor descriptor)
         {
-            return mvcCache.Get(descriptor, CacheFallbackCollection.ControllerAuthenticationDeclarationFallback);
+            lock (mvcLocker)
+            {
+                string key = $"{descriptor.ControllerTypeInfo.FullName}.{descriptor.MethodInfo.Name}";
+                return mvcCache.Get(key, k => CacheFallbackCollection.ControllerAuthenticationDeclarationFallback(descriptor));
+            }
         }
 
         public AuthenticationDeclarationInfo Get(CompiledPageActionDescriptor descriptor)
         {
-            return pageCache.Get(descriptor, CacheFallbackCollection.PageAuthenticationDeclarationFallback);
+            lock (pageLocker)
+            {
+                string key = $"{descriptor.ModelTypeInfo.FullName}.{descriptor.HandlerMethods[0].MethodInfo.Name}";
+                return pageCache.Get(key, k => CacheFallbackCollection.PageAuthenticationDeclarationFallback(descriptor));
+            }
         }
     }
 }
